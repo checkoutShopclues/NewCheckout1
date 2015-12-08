@@ -16,16 +16,17 @@
             $this->redirecturl  = $current_location."?dispatch=payment_notification.return&payment=ezeclick_script&order_id=".$order_info['order_id'] ;
         }
 
-        public function redirect(){
-            // $form_name = "frm_mobikwik";
-            $prepaymentData = $this->pre_redirect();
+        public function getDataForRedirection(){
+            $form_name = "form_ezeclick";
+            $prepaymentData = $this->getPaymentDataForOrder();
             $this->paymentService->savePrePaymentData($prepaymentData);
             $target_url = $this->payment_parameters['payment_method']['params']['url'];
             $form_fields = $this->getFormFields();
-            return array($target_url,$form_fields);
+            $form_array = array("name" => $form_name, "method" => "post", "action" => $target_url);
+            return array("form_array" => $form_array, "form_fields" => $form_fields);
         }
 
-        private function pre_redirect(){
+        private function getPaymentDataForOrder(){
             $order_data = $this->getFormattedOrderData();
             return array("order_id" => $this->order_info['order_id'], "amount" => $this->order_info['total'], "payment_gateway" => "EZECLICK", "order_data" => addslashes(serialize($order_data)));
         }
@@ -50,11 +51,18 @@
         }
 
         private function getFormFields(){
-            $form_fields = array("merchantRequest" => $this->paymentReqMsg,"MID"=>$this->payment_parameters['payment_method']['params']['merchantid']);
+            $form_fields = array(array(
+                                    'name'=>'merchantRequest',
+                                    'value'=>$this->paymentReqMsg
+                                    ),
+                                array(
+                                    'name'=>'MID',
+                                    'value'=>$this->payment_parameters['payment_method']['params']['merchantid']
+                                    ));
             return $form_fields;
         }
 
-        public function return($redirect_response){
+        public function paymentReturn($redirect_response){
             $this->redirect_response = $redirect_response;
             $this->order_info = fn_get_order_info($this->redirect_response['order_id'], true);
 
@@ -62,7 +70,7 @@
         
             $insert_array = array("direcpayreferenceid" => $result['transaction_id'], "order_id" => $redirect_response['order_id'], "flag" => $result['status'], "other_details" => addslashes(serialize($result['response_array'])), "amount" => $result['captured_amount'], "payment_gateway" => "EZECLICK");
             $this->paymentService->saveAfterPaymentData($insert_array);
-            $this->checkResponse($result);
+            $this->checkResponse()?$this->callChangeStatus($result):'';
         }
 
         private function getResponseData(){
@@ -76,10 +84,13 @@
             return array("captured_amount" => $captured_amount,"response_array" => $response_array,"status" => $status);
         }
 
-        private function checkResponse($result){
+        private function checkResponse(){
             if (fn_check_payment_script('ezeclick_script.php', $this->redirect_response['order_id'])){
-                $this->callChangeStatus($result);
-            }              
+                return true;
+            }
+            else{
+                return false;
+            }
         }
 
         private function callChangeStatus($result){
