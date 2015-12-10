@@ -1,6 +1,6 @@
 <?php
 
-class billdesk_script{
+class billdesk_emi_script{
     //need to make a function to find order info details w.r.t. order_id
     private $redirecturl;	
     private $order_info;// get order info main fields including country by name
@@ -10,13 +10,13 @@ class billdesk_script{
     private $checksum;
     private $txnresponse;
     private $return_checksum;
-    private $request_message;
+    private $request_param;
     
     public function __construct($order_info, $payment_parameters, $current_location){
         $this->order_info = $order_info;
         $this->payment_parameters = $payment_parameters;
         $this->paymentService= new PaymentService();
-        $this->redirecturl 	= $current_location."?dispatch=payment_notification.return&payment=billdesk_script&order_id=".$order_info['order_id'] ;
+        $this->redirecturl = $current_location."?dispatch=payment_notification.return&payment=billdesk_emi_script&order_id=".$order_info['order_id'] ;
     }
 
     public function getDataForRedirection(){
@@ -44,63 +44,75 @@ class billdesk_script{
         $transaction_id     = $return_response['2'];
         $this->status             = $return_response['14'];
         
-        $insert_array = array("direcpayreferenceid" => $transaction_id,"order_id" => $this->txnresponse['order_id'] , "flag" => $this->status, "other_details" => addslashes(serialize($response)),"amount" => $this->Amount , "payment_gateway" => "Billdesk");
+        $insert_array = array("direcpayreferenceid" => $transaction_id,"order_id" => $this->txnresponse['order_id'] , "flag" => $this->status, "other_details" => addslashes(serialize($response)),"amount" => $this->Amount , "payment_gateway" => "Billdeskemi");
         $this->paymentService->saveAfterPaymentData($insert_array);
         $this->checkResponse()?$this->callChangeStatus():'';
     }
 
     private function getPaymentDataForOrder(){	
-        $this->request_message = $this->getToken();
+        $this->getChecksum();
         $order_data = $this->getFormattedOrderData();
-        $insert_array = array("order_id" => $this->order_info['order_id'],"amount" => $this->order_info['total'], "payment_gateway" => 'Billdesk', "order_data" => addslashes(serialize($order_data)));
+        $insert_array = array("order_id" => $this->order_info['order_id'],"amount" => $this->order_info['total'], "payment_gateway" => 'Billdeskemi', "order_data" => addslashes(serialize($order_data)));
         return $insert_array;
     }
 
-    private function getToken(){
-        $Type           = 'ALL';
-        $Filler1        = 'NA';
-        $Filler2        = 'NA';
-        $Filler3        = 'NA';
-        $MessageCode    = 'CS1006';
-        $RequestDate    = date('YmdHis');
-        $security_id    = 'shopclues';
-        $Amount     = $order_info['total'];
-        $Order_Id   = $order_info['order_id'];
-
-        $request_param  = $CheckSum     = $MessageCode.'|'.$this->payment_parameters['payment_method']['params']['merchantid'].'|'.$this->order_info['order_id'].'|'.$this->order_info['email'].'|'.$Type.'|'.$RequestDate.'|'.$Filler1.'|'.$Filler2.'|'.$Filler3;
+    private function getChecksum(){
+        $request_param  = $CheckSum  = $this->payment_parameters['payment_method']['params']['merchantid'].'|'.$this->order_info['order_id'].'|'.NA.'|'.$this->order_info['total'].'|'.$this->payment_parameters['payment_method']['params']['bank_id'].'|'.NA.'|'.NA.'|'.'INR'.'|'.$this->payment_parameters['payment_method']['params']['item_code'].'|'.'R'.'|'.'shopclues'.'|'.NA.'|'.NA.'|'.'F'.'|'.$this->order_info['email'].'|'.NA.'|'.NA.'|'.NA.'|'.NA.'|'.NA.'|'.NA.'|'.$this->redirecturl;
+                
         $checksum       = hash_hmac('sha256',$CheckSum,$this->payment_parameters['payment_method']['params']['checksum_key'], false);
-        $checksum   = strtoupper($checksum);
-        $request_param     = $request_param.'|'.$checksum;
-        $params = "msg=".$request_param;
-        $url = $this->payment_parameters['payment_method']['params']['token_url'];
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_POST,1); 
-        curl_setopt($ch, CURLOPT_POSTFIELDS,$params);
-        curl_setopt($ch, CURLOPT_PORT, 443);
-        curl_setopt($ch, CURLOPT_TIMEOUT,10);
-        curl_setopt($ch,CURLOPT_URL,$url); 
-        $response = curl_exec($ch);
-        curl_close($ch);
-
-        $response_url   = $this->redirecturl;
-        $response   = explode('|',$response);
-        $token_details  = $response['7'];
-        $msg        = $this->payment_parameters['payment_method']['params']['merchantid'].'|'.$this->order_info['order_id'].'|NA|'.$this->order_info['total'].'|NA|NA|NA|INR|NA|R|'.$security_id.'|NA|NA|F|'.$this->order_info['email'].'|NA|NA|NA|NA|NA|NA|'.$response_url;
-        $token_details  = 'CP1005!SHOPCLUES!'.$token_details.'!NA!NA!NA';
-        $checksum   =  strtoupper(hash_hmac('sha256',$msg.'|'.$token_details,$this->payment_parameters['payment_method']['params']['checksum_key'], false));
-        $request_message= $msg.'|'.$checksum.'|'.$token_details;
-        return $request_message;               
+        $checksum 	= strtoupper($checksum);
+        $this->request_param     = $request_param.'|'.$checksum;
+        return;
     }
 
     private function getFormFields(){
         $form_fields = array(array(
-                                'name'=>'msg',
-                                'value'=>$this->request_message
+                                'name'=>'MerchantID',
+                                'value'=>$this->payment_parameters['payment_method']['params']['merchantid']
                                 ),
                             array(
-                                'name'=>'hidRequestId',
-                                'value'=>"PGIME400"
+                                'name'=>'CustomerID',
+                                'value'=>$this->order_info['order_id']
+                                ),
+                            array(
+                                'name'=>'TxnAmount',
+                                'value'=>$this->order_info['total']
+                                ),
+                            array(
+                                'name'=>'BankID',
+                                'value'=>$this->payment_parameters['payment_method']['params']['bank_id']
+                                ),
+                            array(
+                                'name'=>'CurrencyType',
+                                'value'=>'INR'
+                                ),
+                            array(
+                                'name'=>'ItemCode',
+                                'value'=>$this->payment_parameters['payment_method']['params']['item_code']
+                                ),
+                            array(
+                                'name'=>'TypeField1',
+                                'value'=>'R'
+                                ),
+                            array(
+                                'name'=>'SecurityID',
+                                'value'=>'shopclues'
+                                ),
+                            array(
+                                'name'=>'TypeField2',
+                                'value'=>'F'
+                                ),
+                            array(
+                                'name'=>'AdditionalInfo1',
+                                'value'=>$this->order_info['email']
+                                ),
+                            array(
+                                'name'=>'RU',
+                                'value'=>$this->redirecturl
+                                ),
+                            array(
+                                'name'=>'msg',
+                                'value'=>$this->request_param
                                 )
                         );
         return $form_fields;
@@ -108,13 +120,16 @@ class billdesk_script{
 
     private function getFormattedOrderData(){
         $order_data = array();
-        $order_data['request_message'] = $this->request_message;
-        $order_data['url'] = $this->payment_parameters['payment_method']['params']['payment_url']; 
+        $order_data['request_message'] = $this->request_param;
+        $order_data['url'] = $this->payment_parameters['payment_method']['params']['payment_url'];
         return $order_data;
     }
     
     private function checkResponse(){
-        if (fn_check_payment_script('billdesk_script.php', $this->txnresponse['order_id'])){
+        if($this->status!='0300'){
+            Analog::log($this->status, json_encode($this->txnresponse['msg']) , payment, "WEB",Registry::get('config.LOG_LEVELS.INFO')); 
+        }
+        if (fn_check_payment_script('billdesk_emi_script.php', $this->txnresponse['order_id'])){
             return true;
         }
         else{

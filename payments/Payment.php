@@ -12,12 +12,12 @@ class Payment{
 	private $cluesBuckService;
 	private $giftCertificateService;
 	private $walletServic;
-
-	private $paymentMode;
-	private $paymentOption;
 	private $finalPrice;
 
-	public function __construct($cart,$userId=''){
+	private $ids_for_payment;
+	private $cust_info;
+
+	public function __construct($ids_for_payment,$cart,$userId=''){
 		// this cart will contain all the products with all the promotions
 
 		$this->cart= $cart;
@@ -31,7 +31,17 @@ class Payment{
 		// getTotalAmount() should return the amount after the product discounts	
 		$this->finalPrice= $cart->getTotalAmount();
 		$this->setTotalDiscount();
+		$this->ids_for_payment = $ids_for_payment;
+		$this->user_id = $userId;
+		$this->cart = $cart;
+	}
 
+	public function set_customer_info(){
+		////$this->cust_info = set info w.r.t. $this->user_id;
+	}
+
+	public function get_customer_info(){
+		return $this->cust_info;
 	}
 
 	public function setTotalDiscount(){
